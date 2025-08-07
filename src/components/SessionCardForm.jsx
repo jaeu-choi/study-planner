@@ -29,12 +29,37 @@ import {
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
+import { generateReviewSchedule, getReviewScheduleDescription, getNextReviewDate } from "@/utils/reviewScheduler";
 
-const SessionCardForm = ({ onClose, session, sessions, saveSessions }) => {
+const SessionCardForm = ({ 
+  onClose, 
+  session, 
+  sessions, 
+  saveSessions,
+  selectedDate,
+  loadDateSessions 
+}) => {
+  // 세션 ID를 미리 생성하여 일관성 유지
+  const generateSessionId = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const dateStr = `${year}${month}${day}`;
+    
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const seconds = String(now.getSeconds()).padStart(2, '0');
+    const timeStr = `${hours}${minutes}${seconds}`;
+    
+    const rand4 = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+    return `${dateStr}-${timeStr}-${rand4}`;
+  };
+
   const [formData, setFormData] = useState(
     session || {
-      id: null, // 새 세션의 경우 저장 시 자동 생성
-      date: new Date().toISOString().split("T")[0],
+      id: session?.id || generateSessionId(), // 새 세션의 경우 미리 ID 생성
+      date: selectedDate || new Date().toISOString().split("T")[0],
       title: "",
       hashtags: "",
       learningType: null, // 'deep' or 'maintain'
@@ -52,33 +77,89 @@ const SessionCardForm = ({ onClose, session, sessions, saveSessions }) => {
       distractions: "",
       next_first_task: "",
       review_due: "",
+      review_schedule: [], // 자동 생성된 복습 일정 배열
+      auto_review_enabled: true, // 자동 복습 일정 사용 여부
       mood_energy: 3,
     },
   );
 
   const handleSubmit = async () => {
     try {
-      // 새로운 파일 시스템을 통해 세션 저장
-      const result = await window.electronAPI?.saveSession(formData);
-
-      if (result?.success) {
-        // 기존 localStorage 기반 시스템도 업데이트 (호환성 유지)
+      // 세션 데이터 준비
+      let sessionToSave = { ...formData };
+      
+      // 자동 복습 일정 생성 (완료 상태이고 자동 복습이 활성화된 경우)
+      console.log('세션 저장 전 체크:', {
+        status: sessionToSave.status,
+        auto_review_enabled: sessionToSave.auto_review_enabled,
+        existing_schedule: sessionToSave.review_schedule
+      });
+      
+      if (sessionToSave.status === 'completed' && sessionToSave.auto_review_enabled) {
+        console.log('복습 일정 생성 조건 만족');
+        
+        // 기존에 복습 일정이 없거나 비어있는 경우에만 새로 생성
+        if (!sessionToSave.review_schedule || sessionToSave.review_schedule.length === 0) {
+          console.log('복습 일정 생성 시작:', sessionToSave.date);
+          
+          try {
+            const reviewSchedule = generateReviewSchedule(sessionToSave.date);
+            sessionToSave.review_schedule = reviewSchedule;
+            
+            // review_due 필드는 다음 복습 일정으로 설정
+            const nextReview = getNextReviewDate(reviewSchedule);
+            if (nextReview) {
+              sessionToSave.review_due = nextReview;
+            }
+            
+            console.log('자동 복습 일정 생성 완료:', {
+              reviewSchedule,
+              nextReview,
+              sessionData: sessionToSave
+            });
+          } catch (error) {
+            console.error('복습 일정 생성 오류:', error);
+          }
+        } else {
+          console.log('기존 복습 일정 존재, 생성 건너뜀');
+        }
+      } else {
+        console.log('복습 일정 생성 조건 불만족:', {
+          status: sessionToSave.status,
+          auto_enabled: sessionToSave.auto_review_enabled
+        });
+      }
+      
+      if (window.electronAPI) {
+        // Electron 환경: 새로운 파일 시스템 사용
+        const result = await window.electronAPI.saveSession(sessionToSave);
+        
+        if (result?.success) {
+          // 선택된 날짜의 세션 다시 로드
+          if (loadDateSessions) {
+            await loadDateSessions(sessionToSave.date);
+          }
+          onClose();
+        } else {
+          alert('세션 저장에 실패했습니다: ' + (result?.error || '알 수 없는 오류'));
+        }
+      } else {
+        // 웹 환경: 기존 localStorage 사용
+        const sessionWithId = {
+          ...sessionToSave,
+          id: sessionToSave.id || Date.now().toString()
+        };
+        
         const newSessions = session
-          ? sessions.map((s) =>
-              s.id === session.id ? { ...formData, id: result.sessionId } : s,
-            )
-          : [...sessions, { ...formData, id: result.sessionId }];
+          ? sessions.map((s) => (s.id === session.id ? sessionWithId : s))
+          : [...sessions, sessionWithId];
 
         saveSessions(newSessions);
         onClose();
-      } else {
-        alert(
-          "세션 저장에 실패했습니다: " + (result?.error || "알 수 없는 오류"),
-        );
       }
     } catch (error) {
-      console.error("세션 저장 오류:", error);
-      alert("세션 저장 중 오류가 발생했습니다.");
+      console.error('세션 저장 오류:', error);
+      alert('세션 저장 중 오류가 발생했습니다.');
     }
   };
 
@@ -154,10 +235,9 @@ const SessionCardForm = ({ onClose, session, sessions, saveSessions }) => {
         return;
       }
 
-      // 세션이 저장되지 않은 경우 임시 ID 사용
-      const sessionId = formData.id || `temp-${Date.now()}`;
+      // 일관된 세션 ID 사용 (미리 생성된 ID)
       const result = await window.electronAPI.attachFile(
-        sessionId,
+        formData.id,
         formData.date,
       );
       console.log("파일 첨부 결과:", result);
@@ -179,7 +259,7 @@ const SessionCardForm = ({ onClose, session, sessions, saveSessions }) => {
   const removeAttachment = async (fileId, fileName) => {
     try {
       const result = await window.electronAPI?.removeAttachment(
-        formData.id || `temp-${Date.now()}`,
+        formData.id,
         fileName,
         formData.date,
       );
@@ -200,7 +280,7 @@ const SessionCardForm = ({ onClose, session, sessions, saveSessions }) => {
   const openAttachment = async (fileName) => {
     try {
       const result = await window.electronAPI?.openAttachment(
-        formData.id || `temp-${Date.now()}`,
+        formData.id,
         fileName,
         formData.date,
       );
@@ -233,7 +313,9 @@ const SessionCardForm = ({ onClose, session, sessions, saveSessions }) => {
     <Dialog open={true} onOpenChange={onClose}>
       <DialogContent className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>세션 카드 {session ? "수정" : "생성"}</DialogTitle>
+          <DialogTitle>
+            세션 카드 {session ? "수정" : "생성"}
+          </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
@@ -264,32 +346,18 @@ const SessionCardForm = ({ onClose, session, sessions, saveSessions }) => {
             <div className="flex gap-2 mt-1">
               <Button
                 type="button"
-                variant={
-                  formData.learningType === "deep" ? "default" : "outline"
-                }
+                variant={formData.learningType === "deep" ? "default" : "outline"}
                 size="sm"
-                onClick={() =>
-                  handleInputChange(
-                    "learningType",
-                    formData.learningType === "deep" ? null : "deep",
-                  )
-                }
+                onClick={() => handleInputChange("learningType", formData.learningType === "deep" ? null : "deep")}
                 className={`${formData.learningType === "deep" ? "bg-blue-600 hover:bg-blue-700 text-white" : "border-blue-600 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950"}`}
               >
                 Deep
               </Button>
               <Button
                 type="button"
-                variant={
-                  formData.learningType === "maintain" ? "default" : "outline"
-                }
+                variant={formData.learningType === "maintain" ? "default" : "outline"}
                 size="sm"
-                onClick={() =>
-                  handleInputChange(
-                    "learningType",
-                    formData.learningType === "maintain" ? null : "maintain",
-                  )
-                }
+                onClick={() => handleInputChange("learningType", formData.learningType === "maintain" ? null : "maintain")}
                 className={`${formData.learningType === "maintain" ? "bg-yellow-600 hover:bg-yellow-700 text-white" : "border-yellow-600 text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-950"}`}
               >
                 Maintain
@@ -363,7 +431,7 @@ const SessionCardForm = ({ onClose, session, sessions, saveSessions }) => {
               rows={3}
               placeholder="- 개념 요약 10문장&#10;- 빈 칠판 복원 1개&#10;- 대표문제 3문제 풀이"
             />
-
+            
             {/* 파일 첨부 */}
             <div className="mt-3">
               <div className="flex items-center gap-2 mb-2">
@@ -378,14 +446,11 @@ const SessionCardForm = ({ onClose, session, sessions, saveSessions }) => {
                   파일 첨부
                 </Button>
               </div>
-
+              
               {formData.attachments && formData.attachments.length > 0 && (
                 <div className="space-y-2">
                   {formData.attachments.map((file) => (
-                    <div
-                      key={file.id}
-                      className="flex items-center gap-2 p-2 border rounded-lg bg-muted/50"
-                    >
+                    <div key={file.id} className="flex items-center gap-2 p-2 border rounded-lg bg-muted/50">
                       {getFileIcon(file.type)}
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate">
@@ -436,10 +501,7 @@ const SessionCardForm = ({ onClose, session, sessions, saveSessions }) => {
                 </Button>
               </div>
               {Object.entries(formData.scores).map(([id, scoreData]) => {
-                const percentage =
-                  scoreData.total > 0
-                    ? (scoreData.score / scoreData.total) * 100
-                    : 0;
+                const percentage = scoreData.total > 0 ? (scoreData.score / scoreData.total) * 100 : 0;
                 return (
                   <Card key={id} className="mb-3">
                     <CardContent className="p-3">
@@ -449,9 +511,7 @@ const SessionCardForm = ({ onClose, session, sessions, saveSessions }) => {
                           <Input
                             placeholder="평가 항목 제목 (예: 지수로그 기본개념문제)"
                             value={scoreData.title}
-                            onChange={(e) =>
-                              updateScore(id, "title", e.target.value)
-                            }
+                            onChange={(e) => updateScore(id, "title", e.target.value)}
                             className="flex-1"
                           />
                           <Button
@@ -471,9 +531,7 @@ const SessionCardForm = ({ onClose, session, sessions, saveSessions }) => {
                             <Input
                               type="number"
                               value={scoreData.score}
-                              onChange={(e) =>
-                                updateScore(id, "score", Number(e.target.value))
-                              }
+                              onChange={(e) => updateScore(id, "score", Number(e.target.value))}
                               className="w-12 text-center"
                               min={0}
                               max={scoreData.total}
@@ -482,14 +540,12 @@ const SessionCardForm = ({ onClose, session, sessions, saveSessions }) => {
                             <Input
                               type="number"
                               value={scoreData.total}
-                              onChange={(e) =>
-                                updateScore(id, "total", Number(e.target.value))
-                              }
+                              onChange={(e) => updateScore(id, "total", Number(e.target.value))}
                               className="w-12 text-center"
                               min={1}
                             />
                           </div>
-
+                          
                           <div className="flex-1">
                             <div className="flex items-center gap-2">
                               <Progress value={percentage} className="flex-1" />
@@ -504,9 +560,7 @@ const SessionCardForm = ({ onClose, session, sessions, saveSessions }) => {
                         <Input
                           placeholder="코멘트 (예: 지수법칙을 헷갈림)"
                           value={scoreData.comment}
-                          onChange={(e) =>
-                            updateScore(id, "comment", e.target.value)
-                          }
+                          onChange={(e) => updateScore(id, "comment", e.target.value)}
                           className="text-sm"
                         />
                       </div>
@@ -529,9 +583,7 @@ const SessionCardForm = ({ onClose, session, sessions, saveSessions }) => {
               <span>분 ×</span>
               <Select
                 value={formData.eft_factor.toString()}
-                onValueChange={(value) =>
-                  handleInputChange("eft_factor", Number(value))
-                }
+                onValueChange={(value) => handleInputChange("eft_factor", Number(value))}
               >
                 <SelectTrigger className="w-20">
                   <SelectValue />
@@ -581,13 +633,66 @@ const SessionCardForm = ({ onClose, session, sessions, saveSessions }) => {
           </div>
 
           <div>
-            <Label htmlFor="review_due">복습 예정일</Label>
-            <Input
-              id="review_due"
-              type="date"
-              value={formData.review_due}
-              onChange={(e) => handleInputChange("review_due", e.target.value)}
-            />
+            <div className="flex items-center justify-between mb-2">
+              <Label>복습 일정</Label>
+              <div className="flex items-center gap-2">
+                <Label htmlFor="auto_review" className="text-sm font-normal">
+                  자동 일정 생성
+                </Label>
+                <input
+                  id="auto_review"
+                  type="checkbox"
+                  checked={formData.auto_review_enabled}
+                  onChange={(e) =>
+                    handleInputChange("auto_review_enabled", e.target.checked)
+                  }
+                  className="w-4 h-4"
+                />
+              </div>
+            </div>
+            
+            {formData.auto_review_enabled ? (
+              <div className="space-y-2">
+                <div className="p-3 bg-blue-50 dark:bg-blue-950/20 rounded-lg border">
+                  <h4 className="text-sm font-medium text-blue-700 dark:text-blue-300 mb-1">
+                    에빙하우스 망각곡선 기반 복습 일정
+                  </h4>
+                  <p className="text-xs text-blue-600 dark:text-blue-400">
+                    세션 완료 시 자동으로 다음 일정이 생성됩니다:
+                  </p>
+                  <ul className="text-xs text-blue-600 dark:text-blue-400 mt-1 ml-4">
+                    <li>• 1일 후 (내일)</li>
+                    <li>• 3일 후 (평일로 조정)</li>
+                    <li>• 7일 후 (1주 후)</li>
+                    <li>• 20일 후 (약 3주 후)</li>
+                    <li>• 45일 후 (약 7주 후)</li>
+                  </ul>
+                  
+                  {formData.review_schedule && formData.review_schedule.length > 0 && (
+                    <div className="mt-2 pt-2 border-t border-blue-200 dark:border-blue-800">
+                      <p className="text-xs font-medium text-blue-700 dark:text-blue-300">
+                        현재 복습 일정:
+                      </p>
+                      <p className="text-xs text-blue-600 dark:text-blue-400">
+                        {getReviewScheduleDescription(formData.review_schedule)}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div>
+                <Label htmlFor="review_due">수동 복습 예정일</Label>
+                <Input
+                  id="review_due"
+                  type="date"
+                  value={formData.review_due}
+                  onChange={(e) =>
+                    handleInputChange("review_due", e.target.value)
+                  }
+                />
+              </div>
+            )}
           </div>
 
           <div>
@@ -628,7 +733,11 @@ const SessionCardForm = ({ onClose, session, sessions, saveSessions }) => {
           </div>
 
           <div className="flex gap-2 pt-4">
-            <Button type="button" onClick={handleSubmit} className="flex-1">
+            <Button
+              type="button"
+              onClick={handleSubmit}
+              className="flex-1"
+            >
               {session ? "수정" : "생성"}
             </Button>
             <Button

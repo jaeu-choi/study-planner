@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { Plus, ChevronLeft, ChevronRight, Calendar } from "lucide-react";
 import SessionCard from "../components/SessionCard";
 import { Button } from "@/components/ui/button";
@@ -6,7 +6,6 @@ import {
   Card,
   CardContent,
   CardDescription,
-  CardHeader,
   CardTitle,
 } from "@/components/ui/card";
 import {
@@ -20,89 +19,85 @@ const DashboardPage = ({
   saveSessions,
   setEditingSession,
   setShowCardForm,
+  selectedDate,
+  setSelectedDate,
+  loadDateSessions,
 }) => {
-  const [currentDate, setCurrentDate] = useState(new Date().toISOString().split('T')[0]);
-  const [dateSessions, setDateSessions] = useState([]);
   const [loading, setLoading] = useState(false);
-  
-  // 날짜별 세션 로드
-  const loadDateSessions = async (date) => {
-    if (!window.electronAPI) {
-      // Electron API가 없으면 기존 데이터 사용
-      const filtered = sessions.filter(s => s.date === date);
-      setDateSessions(filtered);
-      return;
-    }
-    
+
+  // 날짜 변경 시 세션 로드 (로딩 상태 업데이트)
+  const handleLoadDateSessions = async (date) => {
     setLoading(true);
     try {
-      const result = await window.electronAPI.loadDateSessions(date);
-      if (result?.success) {
-        setDateSessions(result.sessions);
-      } else {
-        setDateSessions([]);
-      }
-    } catch (error) {
-      console.error('세션 로드 오류:', error);
-      setDateSessions([]);
+      await loadDateSessions(date);
     } finally {
       setLoading(false);
     }
   };
-  
-  // 날짜 변경 시 세션 로드
-  useEffect(() => {
-    loadDateSessions(currentDate);
-  }, [currentDate]);
-  
+
   // 날짜 네비게이션
   const navigateDate = (direction) => {
-    const current = new Date(currentDate);
-    current.setDate(current.getDate() + (direction === 'prev' ? -1 : 1));
-    setCurrentDate(current.toISOString().split('T')[0]);
+    const current = new Date(selectedDate);
+    current.setDate(current.getDate() + (direction === "prev" ? -1 : 1));
+    const newDate = current.toISOString().split("T")[0];
+    setSelectedDate(newDate);
+    handleLoadDateSessions(newDate);
   };
-  
+
   const goToToday = () => {
-    setCurrentDate(new Date().toISOString().split('T')[0]);
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    console.log('goToToday 클릭 - 현재 날짜:', today);
+    setSelectedDate(today);
+    handleLoadDateSessions(today);
   };
-  
+
   // 현재 날짜에 맞는 세션들 사용
-  const displaySessions = dateSessions.length > 0 ? dateSessions : sessions.filter(s => s.date === currentDate);
+  const displaySessions = sessions;
   const pendingSessions = displaySessions.filter((s) => s.status === "pending");
-  const inProgressSessions = displaySessions.filter((s) => s.status === "in-progress");
-  const completedSessions = displaySessions.filter((s) => s.status === "completed");
+  const inProgressSessions = displaySessions.filter(
+    (s) => s.status === "in-progress",
+  );
+  const completedSessions = displaySessions.filter(
+    (s) => s.status === "completed",
+  );
 
   const totalStudyTime = displaySessions
     .filter((s) => s.status === "completed")
     .reduce((acc, s) => acc + (s.eft_calculated || 0), 0);
 
-  const isToday = currentDate === new Date().toISOString().split('T')[0];
+  const now = new Date();
+  const realToday = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const isToday = selectedDate === realToday;
+  
+  // 디버깅용
+  console.log('DashboardPage - selectedDate:', selectedDate, 'realToday:', realToday, 'isToday:', isToday);
 
   return (
     <div className="p-6">
       <div className="mb-6">
-        <div className="flex justify-between items-start">
+        <div className="flex justify-between items-start mb-3">
           <div className="flex items-center gap-4">
             <h1 className="text-2xl font-bold text-foreground">DashBoard</h1>
-            
+
             {/* 날짜 네비게이션 */}
             <div className="flex items-center gap-2 bg-muted rounded-lg p-2">
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => navigateDate('prev')}
+                onClick={() => navigateDate("prev")}
                 className="h-8 w-8 p-0"
               >
                 <ChevronLeft className="w-4 h-4" />
               </Button>
-              
+
               <div className="flex items-center gap-2 min-w-[140px] justify-center">
                 <Calendar className="w-4 h-4" />
                 <span className="font-medium">
-                  {new Date(currentDate).toLocaleDateString('ko-KR', {
-                    month: 'short',
-                    day: 'numeric',
-                    weekday: 'short'
+                  {new Date(selectedDate).toLocaleDateString("ko-KR", {
+                    month: "short",
+                    day: "numeric",
+                    weekday: "short",
                   })}
                 </span>
                 {isToday && (
@@ -111,17 +106,17 @@ const DashboardPage = ({
                   </span>
                 )}
               </div>
-              
+
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => navigateDate('next')}
+                onClick={() => navigateDate("next")}
                 className="h-8 w-8 p-0"
               >
                 <ChevronRight className="w-4 h-4" />
               </Button>
             </div>
-            
+
             {!isToday && (
               <Button
                 variant="outline"
@@ -133,7 +128,7 @@ const DashboardPage = ({
               </Button>
             )}
           </div>
-          
+
           <Button
             onClick={() => {
               setEditingSession(null);
@@ -147,17 +142,23 @@ const DashboardPage = ({
         <div className="grid grid-cols-4 gap-4 mb-6">
           <Card>
             <CardContent className="p-4">
-              <CardDescription>{isToday ? '오늘 세션' : '선택된 날짜 세션'}</CardDescription>
+              <CardDescription>
+                {isToday ? "오늘 세션" : "선택된 날짜 세션"}
+              </CardDescription>
               <CardTitle className="text-2xl">
-                {loading ? '...' : displaySessions.length}
+                {loading ? "..." : displaySessions.length}
               </CardTitle>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-4">
-              <CardDescription>{isToday ? '오늘 학습시간' : '선택된 날짜 학습시간'}</CardDescription>
+              <CardDescription>
+                {isToday ? "오늘 학습시간" : "선택된 날짜 학습시간"}
+              </CardDescription>
               <CardTitle className="text-2xl">
-                {loading ? '...' : `${Math.floor(totalStudyTime / 60)}h ${totalStudyTime % 60}m`}
+                {loading
+                  ? "..."
+                  : `${Math.floor(totalStudyTime / 60)}h ${totalStudyTime % 60}m`}
               </CardTitle>
             </CardContent>
           </Card>
@@ -244,10 +245,10 @@ const DashboardPage = ({
         <ResizablePanel defaultSize={34} minSize={20}>
           <div className="p-4 h-full">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="font-semibold text-green-600 dark:text-green-400">
+              <h2 className="font-semibold text-green-600 dark:text-green-300">
                 완료됨
               </h2>
-              <span className="text-sm bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-2 py-1 rounded-full">
+              <span className="text-sm bg-green-100 dark:bg-green-800 text-green-700 dark:text-green-300 px-2 py-1 rounded-full">
                 {completedSessions.length}
               </span>
             </div>

@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import SessionDetailModal from "./SessionDetailModal";
+import { generateReviewSchedule, getNextReviewDate } from "@/utils/reviewScheduler";
 
 const statusMap = {
   pending: { icon: Circle, cls: "text-muted-foreground", label: "시작전" },
@@ -45,12 +46,71 @@ export default function SessionCard({
     FLOW[(FLOW.indexOf(session.status) + 1) % FLOW.length];
 
   /* ───── 핸들러 ───── */
-  const toggleStatus = () =>
-    saveSessions(
-      sessions.map((s) =>
-        s.id === session.id ? { ...s, status: nextStatus() } : s,
-      ),
-    );
+  const toggleStatus = async () => {
+    const newStatus = nextStatus();
+    let updatedSession = { ...session, status: newStatus };
+    
+    // 상태가 완료됨으로 변경되고 자동 복습이 활성화된 경우 복습 일정 생성
+    if (newStatus === 'completed' && updatedSession.auto_review_enabled !== false) {
+      console.log('상태 변경으로 인한 복습 일정 생성 체크:', {
+        newStatus,
+        auto_review_enabled: updatedSession.auto_review_enabled,
+        existing_schedule: updatedSession.review_schedule
+      });
+      
+      // 기존에 복습 일정이 없거나 비어있는 경우에만 새로 생성
+      if (!updatedSession.review_schedule || updatedSession.review_schedule.length === 0) {
+        try {
+          console.log('복습 일정 생성 시작 (상태 변경):', updatedSession.date);
+          
+          const reviewSchedule = generateReviewSchedule(updatedSession.date);
+          updatedSession.review_schedule = reviewSchedule;
+          
+          // review_due 필드는 다음 복습 일정으로 설정
+          const nextReview = getNextReviewDate(reviewSchedule);
+          if (nextReview) {
+            updatedSession.review_due = nextReview;
+          }
+          
+          // auto_review_enabled 필드가 없으면 true로 설정
+          if (updatedSession.auto_review_enabled === undefined) {
+            updatedSession.auto_review_enabled = true;
+          }
+          
+          console.log('상태 변경으로 복습 일정 생성 완료:', {
+            reviewSchedule,
+            nextReview,
+            sessionData: updatedSession
+          });
+        } catch (error) {
+          console.error('복습 일정 생성 오류 (상태 변경):', error);
+        }
+      }
+    }
+    
+    if (window.electronAPI) {
+      // Electron 환경: 새로운 파일 시스템 사용
+      try {
+        const result = await window.electronAPI.saveSession(updatedSession);
+        if (result?.success) {
+          // 성공하면 상위 컴포넌트에서 세션 목록 다시 로드
+          window.location.reload(); // 임시로 페이지 새로고침 (나중에 개선 가능)
+        } else {
+          alert('세션 상태 변경에 실패했습니다: ' + (result?.error || '알 수 없는 오류'));
+        }
+      } catch (error) {
+        console.error('세션 상태 변경 오류:', error);
+        alert('세션 상태 변경 중 오류가 발생했습니다.');
+      }
+    } else {
+      // 웹 환경: 기존 localStorage 사용
+      saveSessions(
+        sessions.map((s) =>
+          s.id === session.id ? updatedSession : s,
+        ),
+      );
+    }
+  };
 
   /* ───── 렌더 ───── */
   return (
@@ -69,7 +129,10 @@ export default function SessionCard({
                 <StatusIcon className={`w-4 h-4 ${cls}`} />
               </Button>
 
-              <p className="font-semibold text-base text-foreground truncate">
+              <p
+                className="font-semibold text-base text-foreground truncate cursor-pointer hover:text-primary transition-colors"
+                onClick={() => setOpenDetail(true)}
+              >
                 {session.title || "제목 없음"}
               </p>
             </div>
@@ -90,16 +153,33 @@ export default function SessionCard({
                 variant="ghost"
                 size="icon"
                 className="h-6 w-6 p-0"
-                onClick={() =>
-                  confirm("삭제하시겠습니까?") &&
-                  saveSessions(sessions.filter((s) => s.id !== session.id))
-                }
+                onClick={async () => {
+                  if (!confirm("삭제하시겠습니까?")) return;
+                  
+                  if (window.electronAPI) {
+                    // Electron 환경: 새로운 파일 시스템 사용
+                    try {
+                      const result = await window.electronAPI.deleteSession(session.id, session.date);
+                      if (result?.success) {
+                        // 성공하면 상위 컴포넌트에서 세션 목록 다시 로드
+                        window.location.reload(); // 임시로 페이지 새로고침 (나중에 개선 가능)
+                      } else {
+                        alert('세션 삭제에 실패했습니다: ' + (result?.error || '알 수 없는 오류'));
+                      }
+                    } catch (error) {
+                      console.error('세션 삭제 오류:', error);
+                      alert('세션 삭제 중 오류가 발생했습니다.');
+                    }
+                  } else {
+                    // 웹 환경: 기존 localStorage 사용
+                    saveSessions(sessions.filter((s) => s.id !== session.id));
+                  }
+                }}
               >
                 <Trash2 className="w-3 h-3 text-destructive" />
               </Button>
             </div>
           </div>
-
           {/* 2행: 날짜 / 학습유형 / 펼침버튼 */}
           <div className="pl-1 flex justify-between items-center text-sm text-muted-foreground">
             <div className="flex items-center gap-2 min-w-0">
@@ -131,7 +211,6 @@ export default function SessionCard({
               )}
             </Button>
           </div>
-
           {/* 3행: 목표 / 집중시간 (접힘) */}
           {expanded && (
             <div className="pl-1 space-y-2 text-sm">
@@ -145,16 +224,6 @@ export default function SessionCard({
               )}
             </div>
           )}
-
-          {/* 더보기 버튼 */}
-          <Button
-            variant="link"
-            size="sm"
-            className="pl-1"
-            onClick={() => setOpenDetail(true)}
-          >
-            더보기
-          </Button>
         </CardContent>
       </Card>
 
@@ -162,6 +231,8 @@ export default function SessionCard({
         open={openDetail}
         onOpenChange={setOpenDetail}
         session={session}
+        setEditingSession={setEditingSession}
+        setShowCardForm={setShowCardForm}
       />
     </>
   );

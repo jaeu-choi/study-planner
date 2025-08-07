@@ -20,4 +20,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   // 첨부파일 열기
   openAttachment: (sessionId, fileName, date) => 
     ipcRenderer.invoke("open-attachment", sessionId, fileName, date),
+  
+  // 첨부파일 폴더 열기
+  openAttachmentFolder: (sessionId, date) => 
+    ipcRenderer.invoke("open-attachment-folder", sessionId, date),
 });
