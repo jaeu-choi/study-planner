@@ -83,7 +83,7 @@ const writeMetadata = (metadataPath, date, sessions) => {
  * @param {string} date - 날짜 (YYYY-MM-DD)
  * @returns {Object[]} 세션 배열
  */
-export const loadDateSessions = (userDataPath, date) => {
+const loadDateSessions = (userDataPath, date) => {
   const paths = getDatePaths(userDataPath, date);
   
   if (!fs.existsSync(paths.dateFolder)) {
@@ -123,7 +123,7 @@ export const loadDateSessions = (userDataPath, date) => {
  * @param {Object} session - 세션 데이터
  * @returns {Promise<{success: boolean, sessionId: string}>} 저장 결과
  */
-export const saveSession = async (userDataPath, session) => {
+const saveSession = async (userDataPath, session) => {
   const date = session.date;
   const sessionId = session.id;
   
@@ -181,7 +181,7 @@ export const saveSession = async (userDataPath, session) => {
  * @param {string} date - 날짜 (YYYY-MM-DD)
  * @returns {Promise<{success: boolean}>} 삭제 결과
  */
-export const deleteSession = async (userDataPath, sessionId, date) => {
+const deleteSession = async (userDataPath, sessionId, date) => {
   try {
     const paths = getDatePaths(userDataPath, date);
     const lockPath = getMetadataLockPath(paths.dateFolder);
@@ -231,7 +231,7 @@ export const deleteSession = async (userDataPath, sessionId, date) => {
  * @param {string} date - 날짜 (YYYY-MM-DD)
  * @returns {Object|null} 메타데이터 또는 null
  */
-export const loadDateMetadata = (userDataPath, date) => {
+const loadDateMetadata = (userDataPath, date) => {
   const paths = getDatePaths(userDataPath, date);
   return readMetadata(paths.metadataPath);
 };
@@ -242,7 +242,7 @@ export const loadDateMetadata = (userDataPath, date) => {
  * @param {string[]} dates - 날짜 배열
  * @returns {Object} 날짜별 메타데이터 맵
  */
-export const loadMultipleMetadata = (userDataPath, dates) => {
+const loadMultipleMetadata = (userDataPath, dates) => {
   const result = {};
   
   dates.forEach(date => {
@@ -253,4 +253,12 @@ export const loadMultipleMetadata = (userDataPath, dates) => {
   });
   
   return result;
+};
+
+module.exports = {
+  loadDateSessions,
+  saveSession,
+  deleteSession,
+  loadDateMetadata,
+  loadMultipleMetadata
 };

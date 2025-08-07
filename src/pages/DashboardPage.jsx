@@ -1,5 +1,5 @@
-import React from "react";
-import { Plus } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Plus, ChevronLeft, ChevronRight, Calendar } from "lucide-react";
 import SessionCard from "../components/SessionCard";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,29 +21,125 @@ const DashboardPage = ({
   setEditingSession,
   setShowCardForm,
 }) => {
-  const pendingSessions = sessions.filter((s) => s.status === "pending");
-  const inProgressSessions = sessions.filter((s) => s.status === "in-progress");
-  const completedSessions = sessions.filter((s) => s.status === "completed");
+  const [currentDate, setCurrentDate] = useState(new Date().toISOString().split('T')[0]);
+  const [dateSessions, setDateSessions] = useState([]);
+  const [loading, setLoading] = useState(false);
+  
+  // 날짜별 세션 로드
+  const loadDateSessions = async (date) => {
+    if (!window.electronAPI) {
+      // Electron API가 없으면 기존 데이터 사용
+      const filtered = sessions.filter(s => s.date === date);
+      setDateSessions(filtered);
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      const result = await window.electronAPI.loadDateSessions(date);
+      if (result?.success) {
+        setDateSessions(result.sessions);
+      } else {
+        setDateSessions([]);
+      }
+    } catch (error) {
+      console.error('세션 로드 오류:', error);
+      setDateSessions([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // 날짜 변경 시 세션 로드
+  useEffect(() => {
+    loadDateSessions(currentDate);
+  }, [currentDate]);
+  
+  // 날짜 네비게이션
+  const navigateDate = (direction) => {
+    const current = new Date(currentDate);
+    current.setDate(current.getDate() + (direction === 'prev' ? -1 : 1));
+    setCurrentDate(current.toISOString().split('T')[0]);
+  };
+  
+  const goToToday = () => {
+    setCurrentDate(new Date().toISOString().split('T')[0]);
+  };
+  
+  // 현재 날짜에 맞는 세션들 사용
+  const displaySessions = dateSessions.length > 0 ? dateSessions : sessions.filter(s => s.date === currentDate);
+  const pendingSessions = displaySessions.filter((s) => s.status === "pending");
+  const inProgressSessions = displaySessions.filter((s) => s.status === "in-progress");
+  const completedSessions = displaySessions.filter((s) => s.status === "completed");
 
-  const totalStudyTime = sessions
+  const totalStudyTime = displaySessions
     .filter((s) => s.status === "completed")
     .reduce((acc, s) => acc + (s.eft_calculated || 0), 0);
 
-  const todaySessions = sessions.filter(
-    (s) => s.date === new Date().toISOString().split("T")[0],
-  );
+  const isToday = currentDate === new Date().toISOString().split('T')[0];
 
   return (
     <div className="p-6">
       <div className="mb-6">
-        <div className="flex justify-between">
-          <h1 className="text-2xl font-bold mb-4 text-foreground">DashBoard</h1>
+        <div className="flex justify-between items-start">
+          <div className="flex items-center gap-4">
+            <h1 className="text-2xl font-bold text-foreground">DashBoard</h1>
+            
+            {/* 날짜 네비게이션 */}
+            <div className="flex items-center gap-2 bg-muted rounded-lg p-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => navigateDate('prev')}
+                className="h-8 w-8 p-0"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
+              
+              <div className="flex items-center gap-2 min-w-[140px] justify-center">
+                <Calendar className="w-4 h-4" />
+                <span className="font-medium">
+                  {new Date(currentDate).toLocaleDateString('ko-KR', {
+                    month: 'short',
+                    day: 'numeric',
+                    weekday: 'short'
+                  })}
+                </span>
+                {isToday && (
+                  <span className="text-xs bg-primary text-primary-foreground px-1.5 py-0.5 rounded-full">
+                    오늘
+                  </span>
+                )}
+              </div>
+              
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => navigateDate('next')}
+                className="h-8 w-8 p-0"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+            </div>
+            
+            {!isToday && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={goToToday}
+                className="text-xs"
+              >
+                오늘로
+              </Button>
+            )}
+          </div>
+          
           <Button
             onClick={() => {
               setEditingSession(null);
               setShowCardForm(true);
             }}
-            className="mb-6 flex items-center gap-2"
+            className="flex items-center gap-2"
           >
             <Plus className="w-4 h-4" />새 세션 카드
           </Button>
@@ -51,15 +147,17 @@ const DashboardPage = ({
         <div className="grid grid-cols-4 gap-4 mb-6">
           <Card>
             <CardContent className="p-4">
-              <CardDescription>오늘 세션</CardDescription>
-              <CardTitle className="text-2xl">{todaySessions.length}</CardTitle>
+              <CardDescription>{isToday ? '오늘 세션' : '선택된 날짜 세션'}</CardDescription>
+              <CardTitle className="text-2xl">
+                {loading ? '...' : displaySessions.length}
+              </CardTitle>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-4">
-              <CardDescription>총 학습시간</CardDescription>
+              <CardDescription>{isToday ? '오늘 학습시간' : '선택된 날짜 학습시간'}</CardDescription>
               <CardTitle className="text-2xl">
-                {Math.floor(totalStudyTime / 60)}h {totalStudyTime % 60}m
+                {loading ? '...' : `${Math.floor(totalStudyTime / 60)}h ${totalStudyTime % 60}m`}
               </CardTitle>
             </CardContent>
           </Card>
@@ -102,7 +200,7 @@ const DashboardPage = ({
                 <SessionCard
                   key={session.id}
                   session={session}
-                  sessions={sessions}
+                  sessions={displaySessions}
                   saveSessions={saveSessions}
                   setEditingSession={setEditingSession}
                   setShowCardForm={setShowCardForm}
@@ -130,7 +228,7 @@ const DashboardPage = ({
                 <SessionCard
                   key={session.id}
                   session={session}
-                  sessions={sessions}
+                  sessions={displaySessions}
                   saveSessions={saveSessions}
                   setEditingSession={setEditingSession}
                   setShowCardForm={setShowCardForm}
@@ -158,7 +256,7 @@ const DashboardPage = ({
                 <SessionCard
                   key={session.id}
                   session={session}
-                  sessions={sessions}
+                  sessions={displaySessions}
                   saveSessions={saveSessions}
                   setEditingSession={setEditingSession}
                   setShowCardForm={setShowCardForm}

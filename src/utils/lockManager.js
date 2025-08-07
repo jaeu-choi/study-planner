@@ -53,7 +53,7 @@ const releaseLock = (lockPath, fd) => {
  * @param {number} retryDelay - 재시도 간격 ms (기본: 50)
  * @returns {Promise<number>} 파일 디스크립터
  */
-export const acquireLock = async (lockPath, maxRetries = 20, retryDelay = 50) => {
+const acquireLock = async (lockPath, maxRetries = 20, retryDelay = 50) => {
   let attempts = 0;
   
   while (attempts < maxRetries) {
@@ -81,7 +81,7 @@ export const acquireLock = async (lockPath, maxRetries = 20, retryDelay = 50) =>
  * @param {number} retryDelay - 재시도 간격 ms
  * @returns {Promise<any>} 콜백 함수의 반환값
  */
-export const withLock = async (lockPath, callback, maxRetries = 20, retryDelay = 50) => {
+const withLock = async (lockPath, callback, maxRetries = 20, retryDelay = 50) => {
   let fd = null;
   
   try {
@@ -99,7 +99,7 @@ export const withLock = async (lockPath, callback, maxRetries = 20, retryDelay =
  * @param {string} dateFolder - 날짜 폴더 경로
  * @returns {string} 락 파일 경로
  */
-export const getMetadataLockPath = (dateFolder) => {
+const getMetadataLockPath = (dateFolder) => {
   return path.join(dateFolder, '.metadata.lock');
 };
 
@@ -108,7 +108,7 @@ export const getMetadataLockPath = (dateFolder) => {
  * @param {string} lockPath - 락 파일 경로
  * @param {number} maxAge - 최대 보관 시간 (밀리초, 기본: 30초)
  */
-export const cleanupStaleLock = (lockPath, maxAge = 30000) => {
+const cleanupStaleLock = (lockPath, maxAge = 30000) => {
   try {
     const stats = fs.statSync(lockPath);
     const age = Date.now() - stats.mtime.getTime();
@@ -123,4 +123,11 @@ export const cleanupStaleLock = (lockPath, maxAge = 30000) => {
       console.warn('Error checking stale lock:', error.message);
     }
   }
+};
+
+module.exports = {
+  acquireLock,
+  withLock,
+  getMetadataLockPath,
+  cleanupStaleLock
 };

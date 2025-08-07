@@ -1,6 +1,9 @@
 const { app, BrowserWindow, ipcMain, dialog, shell } = require("electron");
 const path = require("path");
 const fs = require("fs");
+const { saveSession, deleteSession, loadDateSessions } = require('./src/services/sessionStorage');
+const { generateSessionId } = require('./src/utils/fileSystem');
+const { getAttachmentFolderPath, getDatePaths } = require('./src/utils/fileSystem');
 
 let mainWindow;
 
@@ -45,67 +48,55 @@ app.on("activate", () => {
   }
 });
 
-// 파일 저장 IPC 핸들러
+// 세션 저장 IPC 핸들러
 ipcMain.handle("save-session", async (event, sessionData) => {
-  const userDataPath = app.getPath("userData");
-  const sessionsPath = path.join(userDataPath, "sessions");
-
-  if (!fs.existsSync(sessionsPath)) {
-    fs.mkdirSync(sessionsPath, { recursive: true });
+  try {
+    const userDataPath = app.getPath("userData");
+    
+    // 세션 ID가 없으면 새로 생성
+    if (!sessionData.id) {
+      sessionData.id = generateSessionId();
+    }
+    
+    // 날짜가 없으면 오늘 날짜로 설정
+    if (!sessionData.date) {
+      sessionData.date = new Date().toISOString().split('T')[0];
+    }
+    
+    const result = await saveSession(userDataPath, sessionData);
+    return result;
+  } catch (error) {
+    console.error('세션 저장 오류:', error);
+    return { success: false, error: error.message };
   }
+});
 
-  const sessionFolder = path.join(sessionsPath, sessionData.id);
-  if (!fs.existsSync(sessionFolder)) {
-    fs.mkdirSync(sessionFolder, { recursive: true });
+// 날짜별 세션 로드 IPC 핸들러
+ipcMain.handle("load-date-sessions", async (event, date) => {
+  try {
+    const userDataPath = app.getPath("userData");
+    const sessions = loadDateSessions(userDataPath, date);
+    return { success: true, sessions };
+  } catch (error) {
+    console.error('세션 로드 오류:', error);
+    return { success: false, error: error.message, sessions: [] };
   }
+});
 
-  const mdContent = `# Study Session - ${sessionData.date}
-
-## 시간
-- 시작: ${sessionData.start}
-- 종료: ${sessionData.end || "진행중"}
-
-## 목표
-### 사전 목표
-${sessionData.goal_pre}
-
-### 사후 평가
-${sessionData.goal_post}
-
-## 성과
-${sessionData.outcomes}
-
-## 통계
-- EFT: ${sessionData.eft_calculated}분 (집중도: ${sessionData.eft_factor})
-- 기분/에너지: ${sessionData.mood_energy}/5
-
-## 방해 요소
-${sessionData.distractions}
-
-## 다음 과제
-${sessionData.next_first_task}
-
-## 복습 예정일
-${sessionData.review_due}
-`;
-
-  fs.writeFileSync(
-    path.join(sessionFolder, "session-data.md"),
-    mdContent,
-    "utf8",
-  );
-
-  fs.writeFileSync(
-    path.join(sessionFolder, "data.json"),
-    JSON.stringify(sessionData, null, 2),
-    "utf8",
-  );
-
-  return { success: true, path: sessionFolder };
+// 세션 삭제 IPC 핸들러
+ipcMain.handle("delete-session", async (event, sessionId, date) => {
+  try {
+    const userDataPath = app.getPath("userData");
+    const result = await deleteSession(userDataPath, sessionId, date);
+    return result;
+  } catch (error) {
+    console.error('세션 삭제 오류:', error);
+    return { success: false, error: error.message };
+  }
 });
 
 // 파일 첨부 IPC 핸들러
-ipcMain.handle("attach-file", async (event, sessionId) => {
+ipcMain.handle("attach-file", async (event, sessionId, date) => {
   try {
     const result = await dialog.showOpenDialog(mainWindow, {
       properties: ["openFile", "multiSelections"],
@@ -121,9 +112,8 @@ ipcMain.handle("attach-file", async (event, sessionId) => {
     }
 
     const userDataPath = app.getPath("userData");
-    const sessionsPath = path.join(userDataPath, "sessions");
-    const sessionFolder = path.join(sessionsPath, sessionId);
-    const attachmentsFolder = path.join(sessionFolder, "attachments");
+    const paths = getDatePaths(userDataPath, date);
+    const attachmentsFolder = getAttachmentFolderPath(paths.attachmentsFolder, sessionId);
 
     // 첨부파일 폴더 생성
     if (!fs.existsSync(attachmentsFolder)) {
@@ -148,7 +138,7 @@ ipcMain.handle("attach-file", async (event, sessionId) => {
         originalName: fileName,
         fileName: uniqueFileName,
         path: destinationPath,
-        relativePath: path.join("attachments", uniqueFileName),
+        relativePath: path.relative(paths.dateFolder, destinationPath),
         size: fs.statSync(filePath).size,
         type: ext.toLowerCase(),
         attachedAt: new Date().toISOString(),
@@ -163,11 +153,12 @@ ipcMain.handle("attach-file", async (event, sessionId) => {
 });
 
 // 첨부파일 삭제 IPC 핸들러
-ipcMain.handle("remove-attachment", async (event, sessionId, fileName) => {
+ipcMain.handle("remove-attachment", async (event, sessionId, fileName, date) => {
   try {
     const userDataPath = app.getPath("userData");
-    const sessionsPath = path.join(userDataPath, "sessions");
-    const filePath = path.join(sessionsPath, sessionId, "attachments", fileName);
+    const paths = getDatePaths(userDataPath, date);
+    const attachmentsFolder = getAttachmentFolderPath(paths.attachmentsFolder, sessionId);
+    const filePath = path.join(attachmentsFolder, fileName);
 
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
@@ -182,11 +173,12 @@ ipcMain.handle("remove-attachment", async (event, sessionId, fileName) => {
 });
 
 // 첨부파일 열기 IPC 핸들러
-ipcMain.handle("open-attachment", async (event, sessionId, fileName) => {
+ipcMain.handle("open-attachment", async (event, sessionId, fileName, date) => {
   try {
     const userDataPath = app.getPath("userData");
-    const sessionsPath = path.join(userDataPath, "sessions");
-    const filePath = path.join(sessionsPath, sessionId, "attachments", fileName);
+    const paths = getDatePaths(userDataPath, date);
+    const attachmentsFolder = getAttachmentFolderPath(paths.attachmentsFolder, sessionId);
+    const filePath = path.join(attachmentsFolder, fileName);
 
     if (fs.existsSync(filePath)) {
       await shell.openPath(filePath);

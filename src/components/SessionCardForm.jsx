@@ -1,11 +1,31 @@
 import React, { useState } from "react";
-import { X, Star, Plus, Trash2, Paperclip, FileText, Image, Download } from "lucide-react";
+import {
+  X,
+  Star,
+  Plus,
+  Trash2,
+  Paperclip,
+  FileText,
+  Image,
+  Download,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
@@ -13,7 +33,7 @@ import { Badge } from "@/components/ui/badge";
 const SessionCardForm = ({ onClose, session, sessions, saveSessions }) => {
   const [formData, setFormData] = useState(
     session || {
-      id: Date.now().toString(),
+      id: null, // 새 세션의 경우 저장 시 자동 생성
       date: new Date().toISOString().split("T")[0],
       title: "",
       hashtags: "",
@@ -36,13 +56,30 @@ const SessionCardForm = ({ onClose, session, sessions, saveSessions }) => {
     },
   );
 
-  const handleSubmit = () => {
-    const newSessions = session
-      ? sessions.map((s) => (s.id === session.id ? formData : s))
-      : [...sessions, formData];
+  const handleSubmit = async () => {
+    try {
+      // 새로운 파일 시스템을 통해 세션 저장
+      const result = await window.electronAPI?.saveSession(formData);
 
-    saveSessions(newSessions);
-    onClose();
+      if (result?.success) {
+        // 기존 localStorage 기반 시스템도 업데이트 (호환성 유지)
+        const newSessions = session
+          ? sessions.map((s) =>
+              s.id === session.id ? { ...formData, id: result.sessionId } : s,
+            )
+          : [...sessions, { ...formData, id: result.sessionId }];
+
+        saveSessions(newSessions);
+        onClose();
+      } else {
+        alert(
+          "세션 저장에 실패했습니다: " + (result?.error || "알 수 없는 오류"),
+        );
+      }
+    } catch (error) {
+      console.error("세션 저장 오류:", error);
+      alert("세션 저장 중 오류가 발생했습니다.");
+    }
   };
 
   const handleInputChange = (field, value) => {
@@ -109,15 +146,22 @@ const SessionCardForm = ({ onClose, session, sessions, saveSessions }) => {
     try {
       console.log("파일 첨부 시도 중... formData.id:", formData.id);
       console.log("window.electronAPI:", window.electronAPI);
-      
+
       if (!window.electronAPI) {
-        alert("Electron API를 사용할 수 없습니다. 개발자 도구 콘솔을 확인해주세요.");
+        alert(
+          "Electron API를 사용할 수 없습니다. 개발자 도구 콘솔을 확인해주세요.",
+        );
         return;
       }
-      
-      const result = await window.electronAPI.attachFile(formData.id);
+
+      // 세션이 저장되지 않은 경우 임시 ID 사용
+      const sessionId = formData.id || `temp-${Date.now()}`;
+      const result = await window.electronAPI.attachFile(
+        sessionId,
+        formData.date,
+      );
       console.log("파일 첨부 결과:", result);
-      
+
       if (result?.success && result.files) {
         setFormData((prev) => ({
           ...prev,
@@ -134,7 +178,11 @@ const SessionCardForm = ({ onClose, session, sessions, saveSessions }) => {
 
   const removeAttachment = async (fileId, fileName) => {
     try {
-      const result = await window.electronAPI?.removeAttachment(formData.id, fileName);
+      const result = await window.electronAPI?.removeAttachment(
+        formData.id || `temp-${Date.now()}`,
+        fileName,
+        formData.date,
+      );
       if (result?.success) {
         setFormData((prev) => ({
           ...prev,
@@ -151,7 +199,11 @@ const SessionCardForm = ({ onClose, session, sessions, saveSessions }) => {
 
   const openAttachment = async (fileName) => {
     try {
-      const result = await window.electronAPI?.openAttachment(formData.id, fileName);
+      const result = await window.electronAPI?.openAttachment(
+        formData.id || `temp-${Date.now()}`,
+        fileName,
+        formData.date,
+      );
       if (!result?.success) {
         alert(result?.message || "파일 열기에 실패했습니다.");
       }
@@ -181,9 +233,7 @@ const SessionCardForm = ({ onClose, session, sessions, saveSessions }) => {
     <Dialog open={true} onOpenChange={onClose}>
       <DialogContent className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>
-            세션 카드 {session ? "수정" : "생성"}
-          </DialogTitle>
+          <DialogTitle>세션 카드 {session ? "수정" : "생성"}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
@@ -214,18 +264,32 @@ const SessionCardForm = ({ onClose, session, sessions, saveSessions }) => {
             <div className="flex gap-2 mt-1">
               <Button
                 type="button"
-                variant={formData.learningType === "deep" ? "default" : "outline"}
+                variant={
+                  formData.learningType === "deep" ? "default" : "outline"
+                }
                 size="sm"
-                onClick={() => handleInputChange("learningType", formData.learningType === "deep" ? null : "deep")}
+                onClick={() =>
+                  handleInputChange(
+                    "learningType",
+                    formData.learningType === "deep" ? null : "deep",
+                  )
+                }
                 className={`${formData.learningType === "deep" ? "bg-blue-600 hover:bg-blue-700 text-white" : "border-blue-600 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950"}`}
               >
                 Deep
               </Button>
               <Button
                 type="button"
-                variant={formData.learningType === "maintain" ? "default" : "outline"}
+                variant={
+                  formData.learningType === "maintain" ? "default" : "outline"
+                }
                 size="sm"
-                onClick={() => handleInputChange("learningType", formData.learningType === "maintain" ? null : "maintain")}
+                onClick={() =>
+                  handleInputChange(
+                    "learningType",
+                    formData.learningType === "maintain" ? null : "maintain",
+                  )
+                }
                 className={`${formData.learningType === "maintain" ? "bg-yellow-600 hover:bg-yellow-700 text-white" : "border-yellow-600 text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-950"}`}
               >
                 Maintain
@@ -299,7 +363,7 @@ const SessionCardForm = ({ onClose, session, sessions, saveSessions }) => {
               rows={3}
               placeholder="- 개념 요약 10문장&#10;- 빈 칠판 복원 1개&#10;- 대표문제 3문제 풀이"
             />
-            
+
             {/* 파일 첨부 */}
             <div className="mt-3">
               <div className="flex items-center gap-2 mb-2">
@@ -314,16 +378,22 @@ const SessionCardForm = ({ onClose, session, sessions, saveSessions }) => {
                   파일 첨부
                 </Button>
               </div>
-              
+
               {formData.attachments && formData.attachments.length > 0 && (
                 <div className="space-y-2">
                   {formData.attachments.map((file) => (
-                    <div key={file.id} className="flex items-center gap-2 p-2 border rounded-lg bg-muted/50">
+                    <div
+                      key={file.id}
+                      className="flex items-center gap-2 p-2 border rounded-lg bg-muted/50"
+                    >
                       {getFileIcon(file.type)}
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{file.originalName}</p>
+                        <p className="text-sm font-medium truncate">
+                          {file.originalName}
+                        </p>
                         <p className="text-xs text-muted-foreground">
-                          {formatFileSize(file.size)} • {new Date(file.attachedAt).toLocaleString()}
+                          {formatFileSize(file.size)} •{" "}
+                          {new Date(file.attachedAt).toLocaleString()}
                         </p>
                       </div>
                       <Button
@@ -366,7 +436,10 @@ const SessionCardForm = ({ onClose, session, sessions, saveSessions }) => {
                 </Button>
               </div>
               {Object.entries(formData.scores).map(([id, scoreData]) => {
-                const percentage = scoreData.total > 0 ? (scoreData.score / scoreData.total) * 100 : 0;
+                const percentage =
+                  scoreData.total > 0
+                    ? (scoreData.score / scoreData.total) * 100
+                    : 0;
                 return (
                   <Card key={id} className="mb-3">
                     <CardContent className="p-3">
@@ -376,7 +449,9 @@ const SessionCardForm = ({ onClose, session, sessions, saveSessions }) => {
                           <Input
                             placeholder="평가 항목 제목 (예: 지수로그 기본개념문제)"
                             value={scoreData.title}
-                            onChange={(e) => updateScore(id, "title", e.target.value)}
+                            onChange={(e) =>
+                              updateScore(id, "title", e.target.value)
+                            }
                             className="flex-1"
                           />
                           <Button
@@ -396,7 +471,9 @@ const SessionCardForm = ({ onClose, session, sessions, saveSessions }) => {
                             <Input
                               type="number"
                               value={scoreData.score}
-                              onChange={(e) => updateScore(id, "score", Number(e.target.value))}
+                              onChange={(e) =>
+                                updateScore(id, "score", Number(e.target.value))
+                              }
                               className="w-12 text-center"
                               min={0}
                               max={scoreData.total}
@@ -405,12 +482,14 @@ const SessionCardForm = ({ onClose, session, sessions, saveSessions }) => {
                             <Input
                               type="number"
                               value={scoreData.total}
-                              onChange={(e) => updateScore(id, "total", Number(e.target.value))}
+                              onChange={(e) =>
+                                updateScore(id, "total", Number(e.target.value))
+                              }
                               className="w-12 text-center"
                               min={1}
                             />
                           </div>
-                          
+
                           <div className="flex-1">
                             <div className="flex items-center gap-2">
                               <Progress value={percentage} className="flex-1" />
@@ -425,7 +504,9 @@ const SessionCardForm = ({ onClose, session, sessions, saveSessions }) => {
                         <Input
                           placeholder="코멘트 (예: 지수법칙을 헷갈림)"
                           value={scoreData.comment}
-                          onChange={(e) => updateScore(id, "comment", e.target.value)}
+                          onChange={(e) =>
+                            updateScore(id, "comment", e.target.value)
+                          }
                           className="text-sm"
                         />
                       </div>
@@ -448,7 +529,9 @@ const SessionCardForm = ({ onClose, session, sessions, saveSessions }) => {
               <span>분 ×</span>
               <Select
                 value={formData.eft_factor.toString()}
-                onValueChange={(value) => handleInputChange("eft_factor", Number(value))}
+                onValueChange={(value) =>
+                  handleInputChange("eft_factor", Number(value))
+                }
               >
                 <SelectTrigger className="w-20">
                   <SelectValue />
@@ -503,9 +586,7 @@ const SessionCardForm = ({ onClose, session, sessions, saveSessions }) => {
               id="review_due"
               type="date"
               value={formData.review_due}
-              onChange={(e) =>
-                handleInputChange("review_due", e.target.value)
-              }
+              onChange={(e) => handleInputChange("review_due", e.target.value)}
             />
           </div>
 
@@ -547,11 +628,7 @@ const SessionCardForm = ({ onClose, session, sessions, saveSessions }) => {
           </div>
 
           <div className="flex gap-2 pt-4">
-            <Button
-              type="button"
-              onClick={handleSubmit}
-              className="flex-1"
-            >
+            <Button type="button" onClick={handleSubmit} className="flex-1">
               {session ? "수정" : "생성"}
             </Button>
             <Button

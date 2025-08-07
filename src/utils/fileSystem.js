@@ -6,7 +6,7 @@
  * 세션 ID 생성 (YYYYMMDD-HHmmss-rand4 형식)
  * @returns {string} 생성된 세션 ID
  */
-export const generateSessionId = () => {
+const generateSessionId = () => {
   const now = new Date();
   
   // YYYYMMDD
@@ -32,7 +32,7 @@ export const generateSessionId = () => {
  * @param {string} tag - 정규화할 태그
  * @returns {string} 정규화된 태그
  */
-export const normalize = (tag) => {
+const normalize = (tag) => {
   if (!tag || typeof tag !== 'string') return '';
   return tag.trim().replace(/\s+/g, ' ').toLowerCase();
 };
@@ -42,7 +42,7 @@ export const normalize = (tag) => {
  * @param {string|Date} date - 날짜 (YYYY-MM-DD 또는 Date 객체)
  * @returns {string} 주차 ID (YYYY-W##)
  */
-export const getWeekId = (date) => {
+const getWeekId = (date) => {
   const d = typeof date === 'string' ? new Date(date + 'T00:00:00') : new Date(date);
   
   // ISO 8601 주차 계산
@@ -82,7 +82,7 @@ export const getWeekId = (date) => {
  * @param {string} hashtagsString - 해시태그 문자열 (예: "#수학 #미적분 #연습")
  * @returns {string[]} 정규화된 태그 배열
  */
-export const extractTags = (hashtagsString) => {
+const extractTags = (hashtagsString) => {
   if (!hashtagsString || typeof hashtagsString !== 'string') return [];
   
   return hashtagsString
@@ -97,7 +97,7 @@ export const extractTags = (hashtagsString) => {
  * @param {string[]} tags - 태그 배열
  * @returns {Object} 태그별 빈도수 객체
  */
-export const calculateTagFreq = (tags) => {
+const calculateTagFreq = (tags) => {
   const freq = {};
   tags.forEach(tag => {
     const normalized = normalize(tag);
@@ -113,7 +113,7 @@ export const calculateTagFreq = (tags) => {
  * @param {Object[]} sessions - 세션 배열
  * @returns {Object} 전체 태그 빈도수
  */
-export const aggregateTagFreq = (sessions) => {
+const aggregateTagFreq = (sessions) => {
   const totalFreq = {};
   
   sessions.forEach(session => {
@@ -137,7 +137,7 @@ export const aggregateTagFreq = (sessions) => {
  * @param {string} date - 날짜 (YYYY-MM-DD)
  * @returns {Object} 경로 정보 객체
  */
-export const getDatePaths = (userDataPath, date) => {
+const getDatePaths = (userDataPath, date) => {
   const path = require('path');
   
   const dateFolder = path.join(userDataPath, 'sessions', date);
@@ -159,7 +159,7 @@ export const getDatePaths = (userDataPath, date) => {
  * @param {string} sessionId - 세션 ID
  * @returns {string} 세션 파일 경로
  */
-export const getSessionFilePath = (sessionsFolder, sessionId) => {
+const getSessionFilePath = (sessionsFolder, sessionId) => {
   const path = require('path');
   return path.join(sessionsFolder, `session-${sessionId}.json`);
 };
@@ -170,7 +170,19 @@ export const getSessionFilePath = (sessionsFolder, sessionId) => {
  * @param {string} sessionId - 세션 ID
  * @returns {string} 세션별 첨부파일 폴더 경로
  */
-export const getAttachmentFolderPath = (attachmentsFolder, sessionId) => {
+const getAttachmentFolderPath = (attachmentsFolder, sessionId) => {
   const path = require('path');
   return path.join(attachmentsFolder, sessionId);
+};
+
+module.exports = {
+  generateSessionId,
+  normalize,
+  getWeekId,
+  extractTags,
+  calculateTagFreq,
+  aggregateTagFreq,
+  getDatePaths,
+  getSessionFilePath,
+  getAttachmentFolderPath
 };
