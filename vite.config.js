@@ -1,8 +1,13 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import path from "path";
 
-// @tailwindcss/vite 제거하고 기본 설정 사용
 export default defineConfig({
   plugins: [react()],
   base: "./", // Electron용 상대 경로
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "./src"),
+    },
+  },
 });

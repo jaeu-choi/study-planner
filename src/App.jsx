@@ -2,7 +2,8 @@ import React, { useState, useEffect } from "react";
 import SessionCardForm from "./components/SessionCardForm";
 import DashboardPage from "./pages/DashboardPage";
 import CalendarPage from "./pages/CalendarPage";
-
+import "./styles/globals.css";
+import { Button } from "@/components/ui/button";
 // 메인 앱 컴포넌트
 const StudyPlannerApp = () => {
   const [currentPage, setCurrentPage] = useState("dashboard");
@@ -26,10 +27,10 @@ const StudyPlannerApp = () => {
     localStorage.setItem("studySessions", JSON.stringify(newSessions));
   };
 
-
   return (
     <div className="min-h-screen bg-gray-50">
       {/* 네비게이션 */}
+
       <nav className="bg-white border-b">
         <div className="px-6 py-3 flex items-center gap-6">
           <h1 className="text-xl font-bold text-blue-600">Study Planner</h1>
@@ -50,14 +51,15 @@ const StudyPlannerApp = () => {
 
       {/* 메인 콘텐츠 */}
       {currentPage === "dashboard" ? (
-        <DashboardPage 
+        <DashboardPage
           sessions={sessions}
           saveSessions={saveSessions}
           setEditingSession={setEditingSession}
           setShowCardForm={setShowCardForm}
         />
       ) : (
-        <CalendarPage 
+        <CalendarPage
+          G
           sessions={sessions}
           calendarView={calendarView}
           setCalendarView={setCalendarView}
