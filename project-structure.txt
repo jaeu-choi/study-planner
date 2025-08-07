@@ -1,0 +1,45 @@
+.
+├── components.json
+├── eslint.config.js
+├── index.html
+├── main.js
+├── package-lock.json
+├── package.json
+├── postcss.config.js
+├── project-structure.txt
+├── public
+│   └── vite.svg
+├── README.md
+├── src
+│   ├── App.css
+│   ├── App.jsx
+│   ├── assets
+│   │   └── react.svg
+│   ├── components
+│   │   ├── SessionCard.jsx
+│   │   ├── SessionCardForm.jsx
+│   │   ├── ThemeToggle.jsx
+│   │   └── ui
+│   │       ├── badge.tsx
+│   │       ├── button.tsx
+│   │       ├── card.tsx
+│   │       ├── dialog.tsx
+│   │       ├── input.tsx
+│   │       ├── label.tsx
+│   │       ├── select.tsx
+│   │       └── textarea.tsx
+│   ├── contexts
+│   │   └── ThemeContext.jsx
+│   ├── index.css
+│   ├── lib
+│   │   └── utils.ts
+│   ├── main.jsx
+│   └── pages
+│       ├── CalendarPage.jsx
+│       └── DashboardPage.jsx
+├── tailwind.config.js
+├── tsconfig.json
+├── tsconfig.node.json
+└── vite.config.js
+
+9 directories, 34 files

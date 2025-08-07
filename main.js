@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require("electron");
+const { app, BrowserWindow, ipcMain, dialog, shell } = require("electron");
 const path = require("path");
 const fs = require("fs");
 
@@ -9,9 +9,10 @@ function createWindow() {
     width: 1400,
     height: 900,
     webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false,
-      webSecurity: false,
+      nodeIntegration: false,
+      contextIsolation: true,
+      webSecurity: true,
+      preload: path.join(__dirname, "preload.js"),
     },
   });
 
@@ -101,4 +102,100 @@ ${sessionData.review_due}
   );
 
   return { success: true, path: sessionFolder };
+});
+
+// 파일 첨부 IPC 핸들러
+ipcMain.handle("attach-file", async (event, sessionId) => {
+  try {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ["openFile", "multiSelections"],
+      filters: [
+        { name: "이미지", extensions: ["jpg", "jpeg", "png", "gif", "bmp", "webp"] },
+        { name: "문서", extensions: ["pdf", "doc", "docx", "txt", "md"] },
+        { name: "모든 파일", extensions: ["*"] },
+      ],
+    });
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return { success: false, message: "파일이 선택되지 않았습니다." };
+    }
+
+    const userDataPath = app.getPath("userData");
+    const sessionsPath = path.join(userDataPath, "sessions");
+    const sessionFolder = path.join(sessionsPath, sessionId);
+    const attachmentsFolder = path.join(sessionFolder, "attachments");
+
+    // 첨부파일 폴더 생성
+    if (!fs.existsSync(attachmentsFolder)) {
+      fs.mkdirSync(attachmentsFolder, { recursive: true });
+    }
+
+    const attachedFiles = [];
+
+    for (const filePath of result.filePaths) {
+      const fileName = path.basename(filePath);
+      const timestamp = Date.now();
+      const ext = path.extname(fileName);
+      const nameWithoutExt = path.basename(fileName, ext);
+      const uniqueFileName = `${nameWithoutExt}_${timestamp}${ext}`;
+      const destinationPath = path.join(attachmentsFolder, uniqueFileName);
+
+      // 파일 복사
+      fs.copyFileSync(filePath, destinationPath);
+
+      attachedFiles.push({
+        id: timestamp.toString(),
+        originalName: fileName,
+        fileName: uniqueFileName,
+        path: destinationPath,
+        relativePath: path.join("attachments", uniqueFileName),
+        size: fs.statSync(filePath).size,
+        type: ext.toLowerCase(),
+        attachedAt: new Date().toISOString(),
+      });
+    }
+
+    return { success: true, files: attachedFiles };
+  } catch (error) {
+    console.error("파일 첨부 오류:", error);
+    return { success: false, message: "파일 첨부 중 오류가 발생했습니다." };
+  }
+});
+
+// 첨부파일 삭제 IPC 핸들러
+ipcMain.handle("remove-attachment", async (event, sessionId, fileName) => {
+  try {
+    const userDataPath = app.getPath("userData");
+    const sessionsPath = path.join(userDataPath, "sessions");
+    const filePath = path.join(sessionsPath, sessionId, "attachments", fileName);
+
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+      return { success: true };
+    } else {
+      return { success: false, message: "파일을 찾을 수 없습니다." };
+    }
+  } catch (error) {
+    console.error("파일 삭제 오류:", error);
+    return { success: false, message: "파일 삭제 중 오류가 발생했습니다." };
+  }
+});
+
+// 첨부파일 열기 IPC 핸들러
+ipcMain.handle("open-attachment", async (event, sessionId, fileName) => {
+  try {
+    const userDataPath = app.getPath("userData");
+    const sessionsPath = path.join(userDataPath, "sessions");
+    const filePath = path.join(sessionsPath, sessionId, "attachments", fileName);
+
+    if (fs.existsSync(filePath)) {
+      await shell.openPath(filePath);
+      return { success: true };
+    } else {
+      return { success: false, message: "파일을 찾을 수 없습니다." };
+    }
+  } catch (error) {
+    console.error("파일 열기 오류:", error);
+    return { success: false, message: "파일 열기 중 오류가 발생했습니다." };
+  }
 });

@@ -2,8 +2,10 @@ import React, { useState, useEffect } from "react";
 import SessionCardForm from "./components/SessionCardForm";
 import DashboardPage from "./pages/DashboardPage";
 import CalendarPage from "./pages/CalendarPage";
-import "./styles/globals.css";
 import { Button } from "@/components/ui/button";
+import { ThemeProvider } from "@/contexts/ThemeContext";
+import { ThemeToggle } from "@/components/ThemeToggle";
+import "./index.css";
 // 메인 앱 컴포넌트
 const StudyPlannerApp = () => {
   const [currentPage, setCurrentPage] = useState("dashboard");
@@ -28,61 +30,63 @@ const StudyPlannerApp = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* 네비게이션 */}
+    <ThemeProvider>
+      <div className="min-h-screen bg-background">
+        {/* 네비게이션 */}
+        <nav className="bg-card border-b">
+          <div className="px-6 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-6">
+              <h1 className="text-xl font-bold text-primary">Study Planner</h1>
+              <Button
+                variant={currentPage === "dashboard" ? "default" : "ghost"}
+                onClick={() => setCurrentPage("dashboard")}
+              >
+                대시보드
+              </Button>
+              <Button
+                variant={currentPage === "calendar" ? "default" : "ghost"}
+                onClick={() => setCurrentPage("calendar")}
+              >
+                캘린더
+              </Button>
+            </div>
+            <ThemeToggle />
+          </div>
+        </nav>
+        {/* 메인 콘텐츠 */}
+        {currentPage === "dashboard" ? (
+          <DashboardPage
+            sessions={sessions}
+            saveSessions={saveSessions}
+            setEditingSession={setEditingSession}
+            setShowCardForm={setShowCardForm}
+          />
+        ) : (
+          <CalendarPage
+            sessions={sessions}
+            calendarView={calendarView}
+            setCalendarView={setCalendarView}
+            currentDate={currentDate}
+            setCurrentDate={setCurrentDate}
+            setEditingSession={setEditingSession}
+            setShowCardForm={setShowCardForm}
+          />
+        )}
 
-      <nav className="bg-white border-b">
-        <div className="px-6 py-3 flex items-center gap-6">
-          <h1 className="text-xl font-bold text-blue-600">Study Planner</h1>
-          <button
-            onClick={() => setCurrentPage("dashboard")}
-            className={`px-4 py-2 rounded ${currentPage === "dashboard" ? "bg-blue-100 text-blue-600" : "hover:bg-gray-100"}`}
-          >
-            대시보드
-          </button>
-          <button
-            onClick={() => setCurrentPage("calendar")}
-            className={`px-4 py-2 rounded ${currentPage === "calendar" ? "bg-blue-100 text-blue-600" : "hover:bg-gray-100"}`}
-          >
-            캘린더
-          </button>
-        </div>
-      </nav>
-
-      {/* 메인 콘텐츠 */}
-      {currentPage === "dashboard" ? (
-        <DashboardPage
-          sessions={sessions}
-          saveSessions={saveSessions}
-          setEditingSession={setEditingSession}
-          setShowCardForm={setShowCardForm}
-        />
-      ) : (
-        <CalendarPage
-          G
-          sessions={sessions}
-          calendarView={calendarView}
-          setCalendarView={setCalendarView}
-          currentDate={currentDate}
-          setCurrentDate={setCurrentDate}
-          setEditingSession={setEditingSession}
-          setShowCardForm={setShowCardForm}
-        />
-      )}
-
-      {/* 세션 카드 폼 모달 */}
-      {showCardForm && (
-        <SessionCardForm
-          session={editingSession}
-          sessions={sessions}
-          saveSessions={saveSessions}
-          onClose={() => {
-            setShowCardForm(false);
-            setEditingSession(null);
-          }}
-        />
-      )}
-    </div>
+        {/* 세션 카드 폼 모달 */}
+        {showCardForm && (
+          <SessionCardForm
+            session={editingSession}
+            sessions={sessions}
+            saveSessions={saveSessions}
+            onClose={() => {
+              setShowCardForm(false);
+              setEditingSession(null);
+            }}
+          />
+        )}
+      </div>
+    </ThemeProvider>
   );
 };
 
