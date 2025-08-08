@@ -1,112 +1,49 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Play, Pause, Square, RotateCcw, Plus, Minus, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useTime } from '@/contexts/TimeContext';
+import { usePomodoro } from '@/contexts/PomodoroContext';
 
 const TimerPage = () => {
-  // 타이머 상태
-  const [totalSeconds, setTotalSeconds] = useState(25 * 60); // 기본 25분
-  const [remainingSeconds, setRemainingSeconds] = useState(25 * 60);
-  const [isRunning, setIsRunning] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
+  // UI 상태
   const [showSettings, setShowSettings] = useState(false);
   const [customMinutes, setCustomMinutes] = useState(25);
-
-  // 타이머 참조
-  const intervalRef = useRef(null);
-  const startTimeRef = useRef(null);
   
-  const { getCurrentTimeString } = useTime();
+  // 뽀모도로 컨텍스트 사용
+  const {
+    totalSeconds,
+    isRunning,
+    isPaused,
+    getRemainingSeconds,
+    startTimer,
+    pauseTimer,
+    stopTimer,
+    resetTimer,
+    setTimer,
+    formatTime,
+    getProgressPercentage
+  } = usePomodoro();
 
-  // 분과 초 계산
+  // 실시간 데이터 계산
+  const remainingSeconds = getRemainingSeconds();
   const minutes = Math.floor(remainingSeconds / 60);
   const seconds = remainingSeconds % 60;
-  const progressPercentage = ((totalSeconds - remainingSeconds) / totalSeconds) * 100;
+  const progressPercentage = getProgressPercentage();
 
-  // 타이머 시작
-  const startTimer = () => {
-    if (!isRunning && !isPaused) {
-      // 새로 시작
-      startTimeRef.current = new Date();
-      console.log('타이머 시작:', getCurrentTimeString());
-    } else if (isPaused) {
-      // 일시정지에서 재개
-      console.log('타이머 재개:', getCurrentTimeString());
-    }
-    
-    setIsRunning(true);
-    setIsPaused(false);
-    
-    intervalRef.current = setInterval(() => {
-      setRemainingSeconds(prev => {
-        if (prev <= 1) {
-          // 타이머 완료
-          setIsRunning(false);
-          setIsPaused(false);
-          console.log('타이머 완료:', getCurrentTimeString());
-          
-          // 알림 (선택사항)
-          if ('Notification' in window && Notification.permission === 'granted') {
-            new Notification('뽀모도로 완료!', {
-              body: `${Math.floor(totalSeconds / 60)}분 집중 완료`,
-              icon: '/favicon.ico'
-            });
-          }
-          
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-  };
-
-  // 타이머 일시정지
-  const pauseTimer = () => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-    }
-    setIsRunning(false);
-    setIsPaused(true);
-    console.log('타이머 일시정지:', getCurrentTimeString());
-  };
-
-  // 타이머 정지
-  const stopTimer = () => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-    }
-    setIsRunning(false);
-    setIsPaused(false);
-    console.log('타이머 정지:', getCurrentTimeString());
-  };
-
-  // 타이머 리셋
-  const resetTimer = () => {
-    stopTimer();
-    setRemainingSeconds(totalSeconds);
-    console.log('타이머 리셋:', getCurrentTimeString());
-  };
 
   // 시간 조정 (+5분, +10분, -5분, -10분)
   const adjustTime = (minutesToAdd) => {
     const newTotalSeconds = Math.max(60, totalSeconds + (minutesToAdd * 60)); // 최소 1분
-    setTotalSeconds(newTotalSeconds);
-    if (!isRunning && !isPaused) {
-      setRemainingSeconds(newTotalSeconds);
-    }
+    setTimer(newTotalSeconds);
   };
 
   // 사용자 지정 시간 설정
   const setCustomTime = () => {
     const newTotalSeconds = Math.max(1, customMinutes) * 60;
-    setTotalSeconds(newTotalSeconds);
-    if (!isRunning && !isPaused) {
-      setRemainingSeconds(newTotalSeconds);
-    }
+    setTimer(newTotalSeconds);
     setShowSettings(false);
   };
 
@@ -117,21 +54,20 @@ const TimerPage = () => {
     }
   }, []);
 
-  // 컴포넌트 언마운트 시 타이머 정리
+  // UI 실시간 업데이트를 위한 강제 리렌더링
+  const [, forceUpdate] = useState({});
   useEffect(() => {
+    let interval;
+    if (isRunning) {
+      interval = setInterval(() => {
+        forceUpdate({}); // 매초마다 컴포넌트 리렌더링
+      }, 1000);
+    }
     return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
+      if (interval) clearInterval(interval);
     };
-  }, []);
+  }, [isRunning]);
 
-  // 시간 포맷팅
-  const formatTime = (totalSec) => {
-    const min = Math.floor(totalSec / 60);
-    const sec = totalSec % 60;
-    return `${min.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
-  };
 
   return (
     <div className="p-6 max-w-2xl mx-auto">
@@ -313,10 +249,7 @@ const TimerPage = () => {
                   onClick={() => {
                     setCustomMinutes(preset);
                     const newTotalSeconds = preset * 60;
-                    setTotalSeconds(newTotalSeconds);
-                    if (!isRunning && !isPaused) {
-                      setRemainingSeconds(newTotalSeconds);
-                    }
+                    setTimer(newTotalSeconds);
                   }}
                   variant={Math.floor(totalSeconds / 60) === preset ? "default" : "outline"}
                   size="sm"
