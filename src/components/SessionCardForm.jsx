@@ -63,9 +63,9 @@ const SessionCardForm = ({
       title: "",
       hashtags: "",
       learningType: null, // 'deep' or 'maintain'
-      start: "",
-      end: "",
-      status: "pending",
+      start: "", // 시작전 → 진행중 상태 변경 시 자동 설정
+      end: "", // 진행중 → 완료됨 상태 변경 시 자동 설정
+      status: "pending", // 새 세션은 항상 "시작전" 상태로 생성
       goal_pre: "",
       goal_post: "",
       outcomes: "",
@@ -386,8 +386,11 @@ const SessionCardForm = ({
                 type="time"
                 value={formData.start}
                 onChange={(e) => handleInputChange("start", e.target.value)}
-                required
+                placeholder="자동 설정됨"
               />
+              <p className="text-xs text-muted-foreground mt-1">
+                상태를 '진행중'으로 변경 시 자동 설정
+              </p>
             </div>
             <div>
               <Label htmlFor="end">종료</Label>
@@ -396,7 +399,11 @@ const SessionCardForm = ({
                 type="time"
                 value={formData.end}
                 onChange={(e) => handleInputChange("end", e.target.value)}
+                placeholder="자동 설정됨"
               />
+              <p className="text-xs text-muted-foreground mt-1">
+                상태를 '완료됨'으로 변경 시 자동 설정
+              </p>
             </div>
           </div>
 

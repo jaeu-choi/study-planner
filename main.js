@@ -20,7 +20,12 @@ function createWindow() {
   });
 
   // 개발 모드에서는 localhost:5173, 프로덕션에서는 dist/index.html
-  if (process.env.NODE_ENV !== "production") {
+  console.log("NODE_ENV:", process.env.NODE_ENV);
+  
+  // 프로덕션 빌드에서는 무조건 파일 로딩
+  const isDev = process.env.NODE_ENV !== "production" && !app.isPackaged;
+  
+  if (isDev) {
     // 개발 모드
     mainWindow.loadURL("http://localhost:5173");
     mainWindow.webContents.openDevTools();

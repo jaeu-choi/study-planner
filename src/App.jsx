@@ -2,8 +2,10 @@ import React, { useState, useEffect } from "react";
 import SessionCardForm from "./components/SessionCardForm";
 import DashboardPage from "./pages/DashboardPage";
 import CalendarPage from "./pages/CalendarPage";
+import TimerPage from "./pages/TimerPage";
 import { Button } from "@/components/ui/button";
 import { ThemeProvider } from "@/contexts/ThemeContext";
+import { TimeProvider } from "@/contexts/TimeContext";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import "./index.css";
 // 메인 앱 컴포넌트
@@ -14,21 +16,16 @@ const StudyPlannerApp = () => {
   const [editingSession, setEditingSession] = useState(null);
   const [calendarView, setCalendarView] = useState("month");
   
-  // 실제 오늘 날짜로 강제 초기화 (로컬 시간대 기준)
-  const getCurrentDate = () => {
-    return new Date();
-  };
-  
-  const getCurrentDateString = () => {
+  // 페이지별 날짜 상태 (사용자 탐색용)
+  const [currentDate, setCurrentDate] = useState(() => new Date()); // 캘린더용
+  const [selectedDate, setSelectedDate] = useState(() => {
+    // 대시보드용 - 초기값은 오늘
     const now = new Date();
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');
     const day = String(now.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
-  };
-  
-  const [currentDate, setCurrentDate] = useState(() => getCurrentDate());
-  const [selectedDate, setSelectedDate] = useState(() => getCurrentDateString());
+  });
 
   // 선택된 날짜의 세션들 불러오기
   const loadDateSessions = async (date) => {
@@ -57,41 +54,6 @@ const StudyPlannerApp = () => {
     }
   };
 
-  // 앱 시작 시 현재 날짜로 강제 업데이트
-  useEffect(() => {
-    console.log('앱 시작 - 현재 날짜로 강제 설정');
-    const now = new Date();
-    const nowStr = getCurrentDateString();
-    console.log('설정할 날짜:', nowStr, '현재 시간:', now);
-    console.log('로컬 날짜 정보:', {
-      getFullYear: now.getFullYear(),
-      getMonth: now.getMonth() + 1,
-      getDate: now.getDate()
-    });
-    
-    setCurrentDate(now);
-    setSelectedDate(nowStr);
-    
-    // 추가로 상태 확인용 로그
-    setTimeout(() => {
-      console.log('설정 후 selectedDate:', nowStr);
-    }, 100);
-  }, []);
-
-  // currentDate와 selectedDate 동기화
-  useEffect(() => {
-    const dateStr = currentDate.toISOString().split('T')[0];
-    if (selectedDate !== dateStr) {
-      setSelectedDate(dateStr);
-    }
-  }, [currentDate]);
-
-  useEffect(() => {
-    const date = new Date(selectedDate + 'T00:00:00');
-    if (currentDate.toISOString().split('T')[0] !== selectedDate) {
-      setCurrentDate(date);
-    }
-  }, [selectedDate]);
 
   // 초기 로드 및 날짜 변경 시 세션 로드
   useEffect(() => {
@@ -111,7 +73,8 @@ const StudyPlannerApp = () => {
 
   return (
     <ThemeProvider>
-      <div className="min-h-screen bg-background">
+      <TimeProvider>
+        <div className="min-h-screen bg-background">
         {/* 네비게이션 */}
         <nav className="bg-card border-b">
           <div className="px-6 py-3 flex items-center justify-between">
@@ -129,6 +92,12 @@ const StudyPlannerApp = () => {
               >
                 캘린더
               </Button>
+              <Button
+                variant={currentPage === "timer" ? "default" : "ghost"}
+                onClick={() => setCurrentPage("timer")}
+              >
+                타이머
+              </Button>
             </div>
             <ThemeToggle />
           </div>
@@ -144,7 +113,7 @@ const StudyPlannerApp = () => {
             setSelectedDate={setSelectedDate}
             loadDateSessions={loadDateSessions}
           />
-        ) : (
+        ) : currentPage === "calendar" ? (
           <CalendarPage
             sessions={sessions}
             calendarView={calendarView}
@@ -155,7 +124,9 @@ const StudyPlannerApp = () => {
             setShowCardForm={setShowCardForm}
             loadDateSessions={loadDateSessions}
           />
-        )}
+        ) : currentPage === "timer" ? (
+          <TimerPage />
+        ) : null}
 
         {/* 세션 카드 폼 모달 */}
         {showCardForm && (
@@ -171,7 +142,8 @@ const StudyPlannerApp = () => {
             }}
           />
         )}
-      </div>
+        </div>
+      </TimeProvider>
     </ThemeProvider>
   );
 };

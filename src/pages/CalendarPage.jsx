@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useTime } from "@/contexts/TimeContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +17,7 @@ const CalendarPage = ({
   setShowCardForm,
   loadDateSessions,
 }) => {
+  const { isToday, getCurrentDateString } = useTime();
   const [selectedDate, setSelectedDate] = useState(null);
   const [selectedDateSessions, setSelectedDateSessions] = useState([]);
   const [reviewSessions, setReviewSessions] = useState([]);
@@ -73,7 +75,11 @@ const CalendarPage = ({
   // 4) 해당 날짜의 세션 목록 (완료/진행중만)
   const getSessionsForDate = (date) => {
     if (!date) return [];
-    const key = date.toISOString().split("T")[0];
+    // 시간대 문제를 피하기 위해 로컬 날짜 사용
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const key = `${year}-${month}-${day}`;
     const dateSessions = allSessionsData[key] || [];
     return dateSessions.filter((s) => s.status === 'completed' || s.status === 'in-progress');
   };
@@ -81,27 +87,43 @@ const CalendarPage = ({
   // 5) 해당 날짜가 복습 예정일인 세션들 찾기
   const getReviewSessionsForDate = (date) => {
     if (!date) return [];
-    const key = date.toISOString().split("T")[0];
+    // 시간대 문제를 피하기 위해 로컬 날짜 사용
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const key = `${year}-${month}-${day}`;
     const allSessions = Object.values(allSessionsData).flat();
     
-    return allSessions.filter((s) => {
+    console.log(`${key} 날짜의 복습 세션 검색 시작:`, allSessions.length, '개 세션 확인');
+    
+    const reviewSessions = allSessions.filter((s) => {
       // review_due 필드로 확인
-      if (s.review_due === key) return true;
+      if (s.review_due === key) {
+        console.log('review_due로 매치된 세션:', s.title, s.review_due);
+        return true;
+      }
       
       // review_schedule 배열에서도 확인
       if (s.review_schedule && Array.isArray(s.review_schedule)) {
         // 기존 문자열 배열 형태
         if (typeof s.review_schedule[0] === 'string') {
-          return s.review_schedule.includes(key);
+          const match = s.review_schedule.includes(key);
+          if (match) console.log('문자열 배열로 매치된 세션:', s.title, s.review_schedule);
+          return match;
         }
         
         // 새로운 객체 배열 형태
         const migratedSchedule = migrateReviewSchedule(s.review_schedule);
-        return migratedSchedule.some(item => item.date === key && !item.completed);
+        const match = migratedSchedule.some(item => item.date === key && !item.completed);
+        if (match) console.log('객체 배열로 매치된 세션:', s.title, migratedSchedule);
+        return match;
       }
       
       return false;
     });
+    
+    console.log(`${key} 날짜의 복습 세션 결과:`, reviewSessions.length, '개');
+    return reviewSessions;
   };
 
   // 6) 제목을 지정된 길이로 자르기
@@ -133,7 +155,8 @@ const CalendarPage = ({
       
       for (let day = 1; day <= daysInMonth; day++) {
         const date = new Date(year, month, day);
-        const dateStr = date.toISOString().split('T')[0];
+        // 시간대 문제를 피하기 위해 로컬 날짜 사용
+        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
         
         try {
           if (window.electronAPI) {
@@ -156,7 +179,13 @@ const CalendarPage = ({
   const handleDateClick = async (date) => {
     if (!date) return;
     
-    const dateStr = date.toISOString().split('T')[0];
+    console.log('날짜 클릭됨:', date.getDate(), '일');
+    
+    // 시간대 문제를 피하기 위해 로컬 날짜 사용
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const dateStr = `${year}-${month}-${day}`;
     setSelectedDate(dateStr);
     
     // 해당 날짜의 완료된 세션들
@@ -247,10 +276,22 @@ const CalendarPage = ({
             className={`grid grid-cols-7 ${calendarView === "month" ? "auto-rows-min" : ""}`}
           >
             {days.map((date, idx) => {
-              const today = date
-                ? date.toDateString() === new Date().toDateString()
-                : false;
+              // 시간대 문제를 피하기 위해 로컬 날짜 사용
+              const dateStr = date ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` : null;
+              const today = date ? isToday(dateStr) : false;
               const sessionsToday = getSessionsForDate(date);
+              const reviewSessionsToday = getReviewSessionsForDate(date);
+              
+              // 디버깅용 - 선택된 날짜나 오늘만 표시
+              if (date && (dateStr === selectedDate || today)) {
+                console.log(`캘린더 ${date.getDate()}일 상태 (${dateStr === selectedDate ? '선택됨' : '오늘'}):`, {
+                  date: date,
+                  dateStr: dateStr,
+                  today: today,
+                  selected: dateStr === selectedDate,
+                  currentDateString: getCurrentDateString()
+                });
+              }
 
               /* 셀 스타일 */
               const base =
@@ -259,15 +300,19 @@ const CalendarPage = ({
                 ? "bg-muted/50"
                 : today
                   ? "bg-primary/5"
-                  : "bg-background";
-              const hover =
-                date && !today ? "hover:bg-muted/50 cursor-pointer" : "";
+                  : dateStr === selectedDate
+                    ? "bg-secondary/20"
+                    : "bg-background";
+              const hover = date ? "hover:bg-muted/50 cursor-pointer" : "";
 
               return (
                 <div 
                   key={idx} 
                   className={`${base} ${bg} ${hover}`}
-                  onClick={() => handleDateClick(date)}
+                  onClick={() => {
+                    console.log('div 클릭:', date ? date.getDate() : 'null');
+                    handleDateClick(date);
+                  }}
                 >
                   {date && (
                     <>
@@ -284,27 +329,47 @@ const CalendarPage = ({
                         {date.getDate()}
                       </div>
 
-                      {/* 세션 배지 - 제목만 5글자로 표시 */}
+                      {/* 세션 배지 - 일반 세션과 복습 세션 */}
                       <div className="flex flex-wrap gap-1">
+                        {/* 일반 세션 (완료/진행중) */}
                         {sessionsToday
-                          .slice(0, calendarView === "month" ? 3 : 5)
+                          .slice(0, calendarView === "month" ? 2 : 3)
                           .map((s) => (
                             <Badge
                               key={s.id}
                               className={`text-xs px-1 py-0.5 cursor-pointer hover:opacity-80 ${getLearningTypeColor(s.learningType)}`}
-                              onClick={() => handleSessionClick(s)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSessionClick(s);
+                              }}
                             >
                               {truncateTitle(s.title, 5)}
                             </Badge>
                           ))}
                         
+                        {/* 복습 세션 (다른 색상으로 표시) */}
+                        {reviewSessionsToday
+                          .slice(0, calendarView === "month" ? 2 : 3)
+                          .map((s) => (
+                            <Badge
+                              key={`review-${s.id}`}
+                              className="text-xs px-1 py-0.5 cursor-pointer hover:opacity-80 bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSessionClick(s);
+                              }}
+                            >
+                              📚{truncateTitle(s.title, 4)}
+                            </Badge>
+                          ))}
+                        
                         {/* 더보기 표시 */}
-                        {sessionsToday.length > (calendarView === "month" ? 3 : 5) && (
+                        {(sessionsToday.length + reviewSessionsToday.length) > (calendarView === "month" ? 4 : 6) && (
                           <Badge 
                             variant="outline" 
                             className="text-xs px-1 py-0.5"
                           >
-                            +{sessionsToday.length - (calendarView === "month" ? 3 : 5)}
+                            +{(sessionsToday.length + reviewSessionsToday.length) - (calendarView === "month" ? 4 : 6)}
                           </Badge>
                         )}
                       </div>

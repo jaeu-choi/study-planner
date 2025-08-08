@@ -9,6 +9,7 @@ import {
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
+import { useTime } from "@/contexts/TimeContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -39,6 +40,7 @@ export default function SessionCard({
 }) {
   const [openDetail, setOpenDetail] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const { getCurrentTimeString } = useTime();
 
   /* ───── 카드 요약 데이터 ───── */
   const { icon: StatusIcon, cls, label } = statusMap[session.status];
@@ -49,6 +51,36 @@ export default function SessionCard({
   const toggleStatus = async () => {
     const newStatus = nextStatus();
     let updatedSession = { ...session, status: newStatus };
+    
+    // 상태 변경에 따른 시간 자동 설정
+    if (session.status === 'pending' && newStatus === 'in-progress') {
+      // 시작전 → 진행중: 시작 시간 자동 설정
+      const currentTime = getCurrentTimeString();
+      updatedSession.start = currentTime;
+      console.log('세션 시작 시간 자동 설정:', currentTime);
+    } else if (session.status === 'in-progress' && newStatus === 'completed') {
+      // 진행중 → 완료됨: 종료 시간 자동 설정
+      const currentTime = getCurrentTimeString();
+      updatedSession.end = currentTime;
+      console.log('세션 종료 시간 자동 설정:', currentTime);
+      
+      // EFT 시간 재계산
+      if (updatedSession.start && updatedSession.end) {
+        const start = new Date(`2000-01-01 ${updatedSession.start}`);
+        const end = new Date(`2000-01-01 ${updatedSession.end}`);
+        const diffMinutes = (end - start) / 60000;
+        updatedSession.eft_time = Math.max(0, diffMinutes);
+        updatedSession.eft_calculated = Math.round(
+          updatedSession.eft_time * (updatedSession.eft_factor || 0.6)
+        );
+        console.log('EFT 재계산:', {
+          start: updatedSession.start,
+          end: updatedSession.end,
+          eft_time: updatedSession.eft_time,
+          eft_calculated: updatedSession.eft_calculated
+        });
+      }
+    }
     
     // 상태가 완료됨으로 변경되고 자동 복습이 활성화된 경우 복습 일정 생성
     if (newStatus === 'completed' && updatedSession.auto_review_enabled !== false) {

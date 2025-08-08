@@ -61,11 +61,20 @@
     "files": [
       "dist/**/*",
       "main.js",
-      "package.json"
+      "preload.js",
+      "package.json",
+      "src/services/**/*",
+      "src/utils/**/*"
     ],
     "mac": {
       "category": "public.app-category.education",
-      "icon": "build/icon.icns"
+      "icon": "build/icon.icns",
+      "target": {
+        "target": "default",
+        "arch": [
+          "arm64"
+        ]
+      }
     },
     "win": {
       "target": "nsis",

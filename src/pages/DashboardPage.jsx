@@ -1,5 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Plus, ChevronLeft, ChevronRight, Calendar } from "lucide-react";
+import { useTime } from "@/contexts/TimeContext";
 import SessionCard from "../components/SessionCard";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,6 +25,7 @@ const DashboardPage = ({
   loadDateSessions,
 }) => {
   const [loading, setLoading] = useState(false);
+  const { getCurrentDateString, isToday, formatShortDate } = useTime();
 
   // 날짜 변경 시 세션 로드 (로딩 상태 업데이트)
   const handleLoadDateSessions = async (date) => {
@@ -45,9 +47,8 @@ const DashboardPage = ({
   };
 
   const goToToday = () => {
-    const now = new Date();
-    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    console.log('goToToday 클릭 - 현재 날짜:', today);
+    const today = getCurrentDateString();
+    console.log("goToToday 클릭 - 현재 날짜:", today);
     setSelectedDate(today);
     handleLoadDateSessions(today);
   };
@@ -66,12 +67,15 @@ const DashboardPage = ({
     .filter((s) => s.status === "completed")
     .reduce((acc, s) => acc + (s.eft_calculated || 0), 0);
 
-  const now = new Date();
-  const realToday = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-  const isToday = selectedDate === realToday;
-  
+  const isTodaySelected = isToday(selectedDate);
+
   // 디버깅용
-  console.log('DashboardPage - selectedDate:', selectedDate, 'realToday:', realToday, 'isToday:', isToday);
+  console.log(
+    "DashboardPage - selectedDate:",
+    selectedDate,
+    "isToday:",
+    isTodaySelected,
+  );
 
   return (
     <div className="p-6">
@@ -94,13 +98,9 @@ const DashboardPage = ({
               <div className="flex items-center gap-2 min-w-[140px] justify-center">
                 <Calendar className="w-4 h-4" />
                 <span className="font-medium">
-                  {new Date(selectedDate).toLocaleDateString("ko-KR", {
-                    month: "short",
-                    day: "numeric",
-                    weekday: "short",
-                  })}
+                  {formatShortDate(selectedDate)}
                 </span>
-                {isToday && (
+                {isTodaySelected && (
                   <span className="text-xs bg-primary text-primary-foreground px-1.5 py-0.5 rounded-full">
                     오늘
                   </span>
@@ -117,7 +117,7 @@ const DashboardPage = ({
               </Button>
             </div>
 
-            {!isToday && (
+            {!isTodaySelected && (
               <Button
                 variant="outline"
                 size="sm"
@@ -272,4 +272,3 @@ const DashboardPage = ({
 };
 
 export default DashboardPage;
-
