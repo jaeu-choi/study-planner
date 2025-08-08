@@ -205,6 +205,8 @@ const DashboardPage = ({
                   saveSessions={saveSessions}
                   setEditingSession={setEditingSession}
                   setShowCardForm={setShowCardForm}
+                  loadDateSessions={loadDateSessions}
+                  selectedDate={selectedDate}
                 />
               ))}
             </div>
@@ -233,6 +235,8 @@ const DashboardPage = ({
                   saveSessions={saveSessions}
                   setEditingSession={setEditingSession}
                   setShowCardForm={setShowCardForm}
+                  loadDateSessions={loadDateSessions}
+                  selectedDate={selectedDate}
                 />
               ))}
             </div>
@@ -261,6 +265,8 @@ const DashboardPage = ({
                   saveSessions={saveSessions}
                   setEditingSession={setEditingSession}
                   setShowCardForm={setShowCardForm}
+                  loadDateSessions={loadDateSessions}
+                  selectedDate={selectedDate}
                 />
               ))}
             </div>

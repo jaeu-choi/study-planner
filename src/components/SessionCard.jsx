@@ -37,6 +37,8 @@ export default function SessionCard({
   saveSessions,
   setEditingSession,
   setShowCardForm,
+  loadDateSessions,
+  selectedDate,
 }) {
   const [openDetail, setOpenDetail] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -49,6 +51,11 @@ export default function SessionCard({
 
   /* ───── 핸들러 ───── */
   const toggleStatus = async () => {
+    // 완료된 세션은 체크박스로 상태 변경 불가
+    if (session.status === 'completed') {
+      return;
+    }
+    
     const newStatus = nextStatus();
     let updatedSession = { ...session, status: newStatus };
     
@@ -125,8 +132,10 @@ export default function SessionCard({
       try {
         const result = await window.electronAPI.saveSession(updatedSession);
         if (result?.success) {
-          // 성공하면 상위 컴포넌트에서 세션 목록 다시 로드
-          window.location.reload(); // 임시로 페이지 새로고침 (나중에 개선 가능)
+          // 성공하면 현재 날짜의 세션 목록 다시 로드 (페이지 새로고침 대신)
+          if (loadDateSessions && selectedDate) {
+            await loadDateSessions(selectedDate);
+          }
         } else {
           alert('세션 상태 변경에 실패했습니다: ' + (result?.error || '알 수 없는 오류'));
         }
@@ -193,8 +202,10 @@ export default function SessionCard({
                     try {
                       const result = await window.electronAPI.deleteSession(session.id, session.date);
                       if (result?.success) {
-                        // 성공하면 상위 컴포넌트에서 세션 목록 다시 로드
-                        window.location.reload(); // 임시로 페이지 새로고침 (나중에 개선 가능)
+                        // 성공하면 현재 날짜의 세션 목록 다시 로드 (페이지 새로고침 대신)
+                        if (loadDateSessions && selectedDate) {
+                          await loadDateSessions(selectedDate);
+                        }
                       } else {
                         alert('세션 삭제에 실패했습니다: ' + (result?.error || '알 수 없는 오류'));
                       }
